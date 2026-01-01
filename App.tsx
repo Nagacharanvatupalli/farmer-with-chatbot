@@ -141,6 +141,52 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
     }
   };
 
+  const renderMessage = (m: any, idx: number) => {
+    if (m.role === 'user') {
+      return (
+        <div key={idx} className="flex justify-end">
+          <div className="max-w-[80%] p-6 rounded-3xl text-sm shadow-sm rounded-tr-none bg-green-600 text-white">{m.text}</div>
+        </div>
+      );
+    }
+
+    // model message: try to parse structured JSON
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(m.text);
+    } catch (e) {
+      parsed = null;
+    }
+
+    if (parsed && (parsed.title || parsed.summary || parsed.recommendations || parsed.text)) {
+      return (
+        <div key={idx} className="flex justify-start">
+          <div className="max-w-[80%] p-6 rounded-3xl rounded-tl-none bg-white border border-slate-100 text-slate-600 shadow-sm">
+            {parsed.title && <h5 className="text-lg font-bold text-slate-900 mb-2">{parsed.title}</h5>}
+            {parsed.summary && <p className="text-sm text-slate-700 mb-3">{parsed.summary}</p>}
+            {Array.isArray(parsed.recommendations) && (
+              <ul className="list-disc ml-5 mb-3 text-sm text-slate-700">
+                {parsed.recommendations.map((r: string, i: number) => <li key={i}>{r}</li>)}
+              </ul>
+            )}
+            {parsed.details && <div className="text-sm text-slate-600 whitespace-pre-wrap">{parsed.details}</div>}
+            {parsed.text && !parsed.title && !parsed.summary && (
+              <div className="text-sm text-slate-600 whitespace-pre-wrap">{parsed.text}</div>
+            )}
+            <div className="text-[10px] text-slate-400 mt-3">{new Date(m.time || Date.now()).toLocaleString()}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback: plain text
+    return (
+      <div key={idx} className="flex justify-start">
+        <div className="max-w-[80%] p-6 rounded-3xl text-sm shadow-sm rounded-tl-none bg-white border border-slate-100 text-slate-600">{m.text}</div>
+      </div>
+    );
+  };
+
   const handleVerifyOtp = async () => {
     try {
       setLoading(true);
@@ -391,7 +437,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('home');
 
   // AI Expert States
-  const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string; time?: string }[]>([]);
   const [input, setInput] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -435,7 +481,7 @@ const App: React.FC = () => {
 
     const userMsg = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setMessages(prev => [...prev, { role: 'user', text: userMsg, time: new Date().toISOString() }]);
     setLoadingAi(true);
 
     try {
@@ -449,19 +495,13 @@ const App: React.FC = () => {
         model: 'gemini-3-flash-preview',
         contents: [...chatHistory, { role: 'user', parts: [{ text: userMsg }] }],
         config: {
-          systemInstruction: `You are an expert agricultural scientist named "Kisan AI Expert". Your goal is to provide scientific, practical, and localized farming advice specifically for the Indian context. 
-          Use the following farmer profile to personalize your advice: 
-          Name: ${userProfile?.name}
-          Location: ${userProfile?.mandal}, ${userProfile?.district}, ${userProfile?.state}
-          Primary Crop: ${userProfile?.crop}
-          
-          Respond in ${languages.find(l => l.code === lang)?.name || 'English'}. Keep advice actionable, scientific, and empathetic to the farming challenges.`,
+          systemInstruction: `You are an expert agricultural scientist named "Kisan AI Expert". Your goal is to provide scientific, practical, and localized farming advice specifically for the Indian context.\n\nUse the following farmer profile to personalize your advice:\nName: ${userProfile?.name}\nLocation: ${userProfile?.mandal}, ${userProfile?.district}, ${userProfile?.state}\nPrimary Crop: ${userProfile?.crop}\n\nRespond in ${languages.find(l => l.code === lang)?.name || 'English'}. Keep advice actionable, scientific, and empathetic to the farming challenges.\n\nIMPORTANT: Return your response as valid JSON (no extraneous text) following this schema:\n{\n  "title": string,            // short heading\n  "summary": string,          // 1-2 sentence summary\n  "recommendations": [string],// actionable bullets\n  "details": string OPTIONAL  // longer explanation or steps\n}\nIf you cannot produce the structured JSON for any reason, return JSON with a single field { "text": "your normal response here" }.",
           temperature: 0.7,
         },
       });
 
-      const aiResponseText = response.text || "I apologize, but I am unable to generate a recommendation at this moment. Please try rephrasing your question.";
-      setMessages(prev => [...prev, { role: 'model', text: aiResponseText }]);
+      const aiResponseText = response.text || "{ \"text\": \"I apologize, but I am unable to generate a recommendation at this moment. Please try rephrasing your question.\" }";
+      setMessages(prev => [...prev, { role: 'model', text: aiResponseText, time: new Date().toISOString() }]);
     } catch (error) {
       console.error("AI Assistant Error:", error);
       setMessages(prev => [...prev, { role: 'model', text: "I encountered a technical issue while processing your request. Please check your connectivity or try again later." }]);
@@ -627,13 +667,7 @@ const App: React.FC = () => {
                          Hello! I am your Kisan AI Expert. How can I help you improve your farm today?
                       </div>
                    </div>
-                   {messages.map((m, idx) => (
-                     <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] p-6 rounded-3xl text-sm shadow-sm ${m.role === 'user' ? 'rounded-tr-none bg-green-600 text-white' : 'rounded-tl-none bg-white border border-slate-100 text-slate-600'}`}>
-                           {m.text}
-                        </div>
-                     </div>
-                   ))}
+                   {messages.map((m, idx) => renderMessage(m, idx))}
                    {loadingAi && (
                      <div className="flex justify-start">
                         <div className="bg-white border border-slate-100 p-4 rounded-2xl flex items-center gap-3">
