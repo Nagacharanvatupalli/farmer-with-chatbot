@@ -602,12 +602,12 @@ const App: React.FC = () => {
 
               {langOpen && (
                 <div
-                  className={`absolute left-0 mt-12 w-44 rounded-xl shadow-lg overflow-hidden z-50 animate-scaleIn ${currentView === 'home' && window.scrollY <= 20 ? 'bg-slate-900 text-white border border-slate-800' : 'bg-white text-slate-900 border border-slate-100'}`}
+                  className={`absolute left-0 top-full mt-1 w-32 max-h-44 rounded-md shadow-sm overflow-auto z-50 animate-scaleIn ${currentView === 'home' && window.scrollY <= 20 ? 'bg-transparent text-white border border-white/10 backdrop-blur-sm' : 'bg-white text-slate-900 border border-slate-100'}`}
                   role="listbox"
                   tabIndex={-1}
                 >
                   {languages.map((l, i) => (
-                    <div key={l.code} className={`px-3 py-2 cursor-pointer flex items-center justify-between ${i === langFocus ? 'bg-green-50/30' : ''}`}
+                    <div key={l.code} className={`px-2 py-1 text-xs cursor-pointer flex items-center justify-between ${i === langFocus ? 'bg-green-50/30' : ''}`}
                          onMouseEnter={() => setLangFocus(i)}
                          onMouseLeave={() => setLangFocus(-1)}
                          onClick={(e) => { e.stopPropagation(); setLang(l.code); setLangOpen(false); setLangFocus(-1); }}
