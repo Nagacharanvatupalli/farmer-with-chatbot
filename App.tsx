@@ -115,23 +115,6 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [profile, setProfile] = useState({ name: '', state: '', district: '', mandal: '', crop: '' });
-  const [cycleStart, setCycleStart] = useState('');
-  const [cycleEnd, setCycleEnd] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      // reset modal internal state whenever it's opened so it always starts fresh
-      setStep('phone');
-      setPhone('');
-      setOtp('');
-      setVerificationId(null);
-      setLoading(false);
-      setError('');
-      setProfile({ name: '', state: '', district: '', mandal: '', crop: '' });
-      setCycleStart('');
-      setCycleEnd('');
-    }
-  }, [isOpen, mode]);
 
   if (!isOpen) return null;
 
@@ -152,62 +135,100 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
       setStep('otp');
     } catch (err: any) {
       setError(err.message || "Failed to send OTP. Try again.");
+      console.error(err);
+    } finally {
       setLoading(false);
     }
   };
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (langRef.current && !langRef.current.contains(e.target as Node)) {
-        setLangOpen(false);
-        setLangFocus(-1);
+
+  const renderMessage = (m: any, idx: number) => {
+    if (m.role === 'user') {
+      return (
+        <div key={idx} className="flex justify-end">
+          <div className="max-w-[80%] p-6 rounded-3xl text-sm shadow-sm rounded-tr-none bg-green-600 text-white">{m.text}</div>
+        </div>
+      );
+    }
+
+    // model message: try to parse structured JSON
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(m.text);
+    } catch (e) {
+      parsed = null;
+    }
+
+    if (parsed && (parsed.title || parsed.summary || parsed.recommendations || parsed.text)) {
+      return (
+        <div key={idx} className="flex justify-start">
+          <div className="max-w-[80%] p-6 rounded-3xl rounded-tl-none bg-white border border-slate-100 text-slate-600 shadow-sm">
+            {parsed.title && <h5 className="text-lg font-bold text-slate-900 mb-2">{parsed.title}</h5>}
+            {parsed.summary && <p className="text-sm text-slate-700 mb-3">{parsed.summary}</p>}
+            {Array.isArray(parsed.recommendations) && (
+              <ul className="list-disc ml-5 mb-3 text-sm text-slate-700">
+                {parsed.recommendations.map((r: string, i: number) => <li key={i}>{r}</li>)}
+              </ul>
+            )}
+            {parsed.details && <div className="text-sm text-slate-600 whitespace-pre-wrap">{parsed.details}</div>}
+            {parsed.text && !parsed.title && !parsed.summary && (
+              <div className="text-sm text-slate-600 whitespace-pre-wrap">{parsed.text}</div>
+            )}
+            <div className="text-[10px] text-slate-400 mt-3">{new Date(m.time || Date.now()).toLocaleString()}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback: plain text
+    return (
+      <div key={idx} className="flex justify-start">
+        <div className="max-w-[80%] p-6 rounded-3xl text-sm shadow-sm rounded-tl-none bg-white border border-slate-100 text-slate-600">{m.text}</div>
+      </div>
+    );
+  };
+
+  const handleVerifyOtp = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const result = await verificationId.confirm(otp);
+      const user = result.user;
+      const docSnap = await getDoc(doc(db, 'users', user.uid));
+      
+      if (mode === 'login') {
+        if (docSnap.exists()) {
+          onAuthSuccess(docSnap.data());
+        } else {
+          setError("Account not found. Please register first.");
+          await signOut(auth);
+          setStep('phone');
+        }
+      } else {
+        // Register mode
+        if (docSnap.exists()) {
+          setError("Account already exists. Please login.");
+          await signOut(auth);
+          setStep('phone');
+        } else {
+          setStep('profile');
+        }
       }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (!langOpen) return;
-      if (e.key === 'Escape') {
-        setLangOpen(false);
-        setLangFocus(-1);
-      }
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setLangFocus(i => {
-          const next = (i + 1) >= languages.length ? 0 : i + 1;
-          return next;
-        });
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setLangFocus(i => {
-          const prev = (i - 1) < 0 ? languages.length - 1 : i - 1;
-          return prev;
-        });
-      }
-      if (e.key === 'Enter' && langFocus >= 0 && langFocus < languages.length) {
-        const code = languages[langFocus].code;
-        setLang(code);
-        setLangOpen(false);
-        setLangFocus(-1);
-      }
-    };
-    document.addEventListener('click', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onKey); };
-  }, [langOpen]);
+    } catch (err: any) {
+      setError("Invalid OTP. Please check and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleFinishProfile = async () => {
     try {
       setLoading(true);
-      if (!profile.name || !profile.state || !profile.district || !profile.mandal || !profile.crop || !cycleStart || !cycleEnd) {
-        throw new Error("Please fill all fields including cycle start and end dates.");
-      }
-      const start = new Date(cycleStart);
-      const end = new Date(cycleEnd);
-      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
-        throw new Error('Please provide a valid start and end date (start < end).');
+      if (!profile.name || !profile.state || !profile.district || !profile.mandal || !profile.crop) {
+        throw new Error("Please fill all fields.");
       }
       const user = auth.currentUser;
       if (!user) throw new Error("Session expired.");
-      const data = { ...profile, uid: user.uid, phone: user.phoneNumber, cycleStart, cycleEnd, createdAt: new Date().toISOString() };
+      const data = { ...profile, uid: user.uid, phone: user.phoneNumber, createdAt: new Date().toISOString() };
       await setDoc(doc(db, 'users', user.uid), data);
       onAuthSuccess(data);
     } catch (err: any) {
@@ -290,16 +311,6 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
                 {cropOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Cycle Start</label>
-                <input type="date" value={cycleStart} onChange={(e) => setCycleStart(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Cycle End</label>
-                <input type="date" value={cycleEnd} onChange={(e) => setCycleEnd(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" />
-              </div>
-            </div>
 
             <button onClick={handleFinishProfile} disabled={loading} className="w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-green-600/20 mt-4">
               {loading ? <RefreshCw className="animate-spin w-4 h-4" /> : t.auth.finish}
@@ -313,20 +324,6 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
 };
 
 const DashboardView = ({ userProfile, t }: any) => {
-  const computeCycleProgress = () => {
-    const s = userProfile?.cycleStart;
-    const e = userProfile?.cycleEnd;
-    if (!s || !e) return null;
-    const start = new Date(s);
-    const end = new Date(e);
-    const now = new Date();
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end.getTime() <= start.getTime()) return null;
-    const total = end.getTime() - start.getTime();
-    const elapsed = now.getTime() - start.getTime();
-    const pct = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
-    return `${pct}%`;
-  };
-
   return (
     <div className="pt-24 pb-12 w-full max-w-[1440px] mx-auto px-8 animate-fadeInUp">
       <div className="flex flex-col lg:flex-row justify-between items-start gap-10">
@@ -366,7 +363,7 @@ const DashboardView = ({ userProfile, t }: any) => {
                   </div>
                 </div>
                 
-                <button onClick={() => (window as any).__openEditProfile?.()} className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all">
+                <button className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all">
                   <Settings size={16}/> Edit Profile
                 </button>
               </div>
@@ -381,19 +378,14 @@ const DashboardView = ({ userProfile, t }: any) => {
               <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Farm Management</h3>
               <p className="text-slate-400 text-sm">Real-time overview of your agricultural assets.</p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={() => (window as any).__openAddCrop?.()} className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-green-600/30 hover:scale-105 active:scale-95 transition-all">
-                <Plus size={18} /> {t.dash.addCrop}
-              </button>
-              <button onClick={() => (window as any).__openMyCrops?.()} className="flex items-center gap-2 bg-white text-green-600 px-6 py-3 rounded-2xl font-black uppercase text-[10px] border border-green-600 shadow-sm hover:scale-105 active:scale-95 transition-all">
-                <LayoutDashboard size={16} /> My Crops
-              </button>
-            </div>
+            <button className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-green-600/30 hover:scale-105 active:scale-95 transition-all">
+              <Plus size={18} /> {t.dash.addCrop}
+            </button>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard icon={<Wheat size={24}/>} label="Active Crop" value={userProfile?.crop} color="green" />
-            <StatCard icon={<Calendar size={24}/>} label="Cycle Progress" value={computeCycleProgress() || '—'} color="blue" />
+            <StatCard icon={<Calendar size={24}/>} label="Cycle Progress" value="65%" color="blue" />
             <StatCard icon={<TrendingUp size={24}/>} label="Market Price" value="↑ 12%" color="orange" />
             {/* Fix: Droplets to Droplet */}
             <StatCard icon={<Droplet size={24}/>} label="Irrigation" value="Normal" color="cyan" />
@@ -445,19 +437,10 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('home');
 
   // AI Expert States
-  const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string; time?: string }[]>([]);
   const [input, setInput] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [addCropOpen, setAddCropOpen] = useState(false);
-  const [myCropsOpen, setMyCropsOpen] = useState(false);
-  const [selectedCrop, setSelectedCrop] = useState<string | null>(null);
-  const [myCropsLoading, setMyCropsLoading] = useState(false);
-  const [myCropsError, setMyCropsError] = useState('');
-  const [langOpen, setLangOpen] = useState(false);
-  const [langFocus, setLangFocus] = useState<number>(-1);
-  const langRef = useRef<HTMLDivElement | null>(null);
 
   const t = translations[lang] || translations.en;
 
@@ -477,21 +460,11 @@ const App: React.FC = () => {
     return () => unsub();
   }, [authModal.isOpen]);
 
-  
-
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [messages, loadingAi]);
-
-  // expose a small opener so DashboardView's button can call it without changing many props
-  useEffect(() => {
-    (window as any).__openEditProfile = () => setProfileModalOpen(true);
-    (window as any).__openAddCrop = () => setAddCropOpen(true);
-    (window as any).__openMyCrops = () => setMyCropsOpen(true);
-    return () => { try { delete (window as any).__openEditProfile; delete (window as any).__openAddCrop } catch {} };
-  }, []);
 
   const handleNav = (v: string) => {
     if (['dashboard', 'weather', 'suggestions'].includes(v) && !isLoggedIn) {
@@ -502,32 +475,13 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSetPrimary = async (c: string) => {
-    try {
-      setMyCropsLoading(true);
-      setMyCropsError('');
-      if (!c) throw new Error('Invalid crop');
-      const user = auth.currentUser;
-      if (!user) throw new Error('Please login to set primary crop');
-      const data = { crop: c, updatedAt: new Date().toISOString() };
-      await setDoc(doc(db, 'users', user.uid), data, { merge: true });
-      setUserProfile((prev: any) => ({ ...(prev || {}), ...data }));
-      setSelectedCrop(c);
-      setMyCropsOpen(false);
-    } catch (err: any) {
-      setMyCropsError(err.message || 'Failed to set primary crop');
-    } finally {
-      setMyCropsLoading(false);
-    }
-  };
-
   // Implement AI Chat Logic
   const handleAskAI = async () => {
     if (!input.trim() || loadingAi) return;
 
     const userMsg = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setMessages(prev => [...prev, { role: 'user', text: userMsg, time: new Date().toISOString() }]);
     setLoadingAi(true);
 
     try {
@@ -541,19 +495,13 @@ const App: React.FC = () => {
         model: 'gemini-3-flash-preview',
         contents: [...chatHistory, { role: 'user', parts: [{ text: userMsg }] }],
         config: {
-          systemInstruction: `You are an expert agricultural scientist named "Kisan AI Expert". Your goal is to provide scientific, practical, and localized farming advice specifically for the Indian context. 
-          Use the following farmer profile to personalize your advice: 
-          Name: ${userProfile?.name}
-          Location: ${userProfile?.mandal}, ${userProfile?.district}, ${userProfile?.state}
-          Primary Crop: ${userProfile?.crop}
-          
-          Respond in ${languages.find(l => l.code === lang)?.name || 'English'}. Keep advice actionable, scientific, and empathetic to the farming challenges.`,
+          systemInstruction: `You are an expert agricultural scientist named "Kisan AI Expert". Your goal is to provide scientific, practical, and localized farming advice specifically for the Indian context.\n\nUse the following farmer profile to personalize your advice:\nName: ${userProfile?.name}\nLocation: ${userProfile?.mandal}, ${userProfile?.district}, ${userProfile?.state}\nPrimary Crop: ${userProfile?.crop}\n\nRespond in ${languages.find(l => l.code === lang)?.name || 'English'}. Keep advice actionable, scientific, and empathetic to the farming challenges.\n\nIMPORTANT: Return your response as valid JSON (no extraneous text) following this schema:\n{\n  "title": string,            // short heading\n  "summary": string,          // 1-2 sentence summary\n  "recommendations": [string],// actionable bullets\n  "details": string OPTIONAL  // longer explanation or steps\n}\nIf you cannot produce the structured JSON for any reason, return JSON with a single field { "text": "your normal response here" }.",
           temperature: 0.7,
         },
       });
 
-      const aiResponseText = response.text || "I apologize, but I am unable to generate a recommendation at this moment. Please try rephrasing your question.";
-      setMessages(prev => [...prev, { role: 'model', text: aiResponseText }]);
+      const aiResponseText = response.text || "{ \"text\": \"I apologize, but I am unable to generate a recommendation at this moment. Please try rephrasing your question.\" }";
+      setMessages(prev => [...prev, { role: 'model', text: aiResponseText, time: new Date().toISOString() }]);
     } catch (error) {
       console.error("AI Assistant Error:", error);
       setMessages(prev => [...prev, { role: 'model', text: "I encountered a technical issue while processing your request. Please check your connectivity or try again later." }]);
@@ -587,39 +535,11 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-5">
-            <div ref={langRef} className={`relative px-2 py-0 rounded-lg flex items-center gap-2 border ${currentView === 'home' && window.scrollY <= 20 ? 'bg-white/5 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
+            <div className={`p-1 rounded-xl flex items-center gap-1 border ${currentView === 'home' && window.scrollY <= 20 ? 'bg-white/10 border-white/20' : 'bg-slate-100 border-slate-200'}`}>
               <Globe size={14} className={`${currentView === 'home' && window.scrollY <= 20 ? 'text-white/60' : 'text-slate-400'} mx-1`} />
-              <button
-                className={`flex items-center gap-2 text-[10px] font-black uppercase pr-3 pl-2 h-9 rounded-md bg-transparent outline-none ${currentView === 'home' && window.scrollY <= 20 ? 'text-white' : 'text-slate-900'}`}
-                onClick={(e) => { e.stopPropagation(); setLangOpen(v => !v); setLangFocus(-1); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowDown') { e.preventDefault(); setLangOpen(true); setLangFocus(0); }
-                  if (e.key === 'Escape') { setLangOpen(false); setLangFocus(-1); }
-                }}
-                aria-haspopup="listbox"
-                aria-expanded={langOpen}
-              >
-                <span className="leading-none">{languages.find(l => l.code === lang)?.name}</span>
-                <ChevronRight size={12} className={`transform transition-transform duration-200 ${langOpen ? 'rotate-270' : 'rotate-90'} ${currentView === 'home' && window.scrollY <= 20 ? 'text-white/60' : 'text-slate-400'}`} />
-              </button>
-
-              {langOpen && (
-                <div
-                  className={`absolute right-0 top-full mt-2 w-40 max-h-56 rounded-lg shadow-md overflow-auto z-50 animate-scaleIn ${currentView === 'home' && window.scrollY <= 20 ? 'bg-white/5 text-white border border-white/10 backdrop-blur-sm' : 'bg-white text-slate-900 border border-slate-100'}`}
-                  role="listbox"
-                  tabIndex={-1}
-                >
-                  {languages.map((l, i) => (
-                    <div key={l.code} className={`px-2 py-1 text-xs cursor-pointer flex items-center justify-between ${i === langFocus ? 'bg-green-600/10' : ''}`}
-                         onMouseEnter={() => setLangFocus(i)}
-                         onMouseLeave={() => setLangFocus(-1)}
-                         onClick={(e) => { e.stopPropagation(); setLang(l.code); setLangOpen(false); setLangFocus(-1); }}
-                    >
-                      <span className={`${currentView === 'home' && window.scrollY <= 20 ? (l.code === lang ? 'text-green-200 font-black' : 'text-white text-sm') : (l.code === lang ? 'text-green-700 font-black text-sm' : 'text-slate-700 text-sm')}`}>{l.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <select value={lang} onChange={(e) => setLang(e.target.value)} className={`bg-transparent text-[10px] font-black uppercase outline-none pr-1 ${currentView === 'home' && window.scrollY <= 20 ? 'text-white' : 'text-slate-900'}`}>
+                {languages.map(l => <option key={l.code} value={l.code} className="text-slate-900">{l.name}</option>)}
+              </select>
             </div>
             
             {!isLoggedIn ? (
@@ -643,281 +563,6 @@ const App: React.FC = () => {
       </div>
     </nav>
   );
-
-  // Profile Edit Modal: edit profile fields and save directly to Firestore (no OTP)
-  const ProfileEditModal = ({ isOpen, onClose, userProfile, onSave }: any) => {
-    const [localProfile, setLocalProfile] = useState({ name: '', state: '', district: '', mandal: '', crop: '' });
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-      if (isOpen) {
-        setLocalProfile({
-          name: userProfile?.name || '',
-          state: userProfile?.state || '',
-          district: userProfile?.district || '',
-          mandal: userProfile?.mandal || '',
-          crop: userProfile?.crop || ''
-        });
-        setError('');
-        setLoading(false);
-      }
-    }, [isOpen, userProfile]);
-
-    if (!isOpen) return null;
-
-    const handleSave = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        if (!localProfile.name || !localProfile.state || !localProfile.district || !localProfile.mandal || !localProfile.crop) {
-          throw new Error('Please fill all fields');
-        }
-
-        const user = auth.currentUser;
-        if (!user) throw new Error('Session expired. Please login again.');
-
-        const data = { ...localProfile, uid: user.uid, phone: userProfile?.phone || user.phoneNumber || '', updatedAt: new Date().toISOString() };
-        await setDoc(doc(db, 'users', user.uid), data, { merge: true });
-        onSave && onSave(data);
-        onClose();
-      } catch (err: any) {
-        setError(err.message || 'Failed to save profile');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/40">
-        <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl relative animate-scaleIn border border-white/20">
-          <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"><X size={16} /></button>
-          <h3 className="text-2xl font-serif text-slate-900 mb-2">Edit Profile</h3>
-          <p className="text-slate-500 text-xs mb-8">Update your agricultural profile details</p>
-
-          {error && <div className="mb-6 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] border border-red-100 flex items-center gap-2"><AlertTriangle size={14}/>{error}</div>}
-
-          <div className="space-y-3 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-            <div className="space-y-1">
-              <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Full Name</label>
-              <input value={localProfile.name} onChange={(e) => setLocalProfile({...localProfile, name: e.target.value})} type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ring-green-500" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[8px] font-black uppercase text-slate-400 ml-1">State</label>
-              <select value={localProfile.state} onChange={(e) => setLocalProfile({...localProfile, state: e.target.value, district: '', mandal: ''})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
-                <option value="">Select state</option>
-                {Object.keys(locationData).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-
-            {localProfile.state && (
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase text-slate-400 ml-1">District</label>
-                <select value={localProfile.district} onChange={(e) => setLocalProfile({...localProfile, district: e.target.value, mandal: ''})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
-                  <option value="">Select district</option>
-                  {Object.keys(locationData[localProfile.state]).map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-            )}
-
-            {localProfile.district && (
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Mandal</label>
-                <select value={localProfile.mandal} onChange={(e) => setLocalProfile({...localProfile, mandal: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
-                  <option value="">Select mandal</option>
-                  {locationData[localProfile.state][localProfile.district].map((m: string) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Primary Crop</label>
-              <select value={localProfile.crop} onChange={(e) => setLocalProfile({...localProfile, crop: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
-                <option value="">Select crop</option>
-                {cropOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-
-            <button onClick={handleSave} disabled={loading} className="w-full bg-green-600 text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-green-600/20 mt-4">
-              {loading ? <RefreshCw className="animate-spin w-4 h-4" /> : 'Save Changes'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Add Crop Modal: choose a crop and save it as primary (and append to crops list)
-  const AddCropModal = ({ isOpen, onClose, userProfile, onAdd }: any) => {
-    const [selected, setSelected] = useState('');
-    const [custom, setCustom] = useState('');
-    const [cropStart, setCropStart] = useState('');
-    const [cropEnd, setCropEnd] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-      if (isOpen) {
-        setSelected('');
-        setCustom('');
-        setCropStart('');
-        setCropEnd('');
-        setError('');
-        setLoading(false);
-      }
-    }, [isOpen]);
-
-    if (!isOpen) return null;
-
-    const cropToSave = () => (custom.trim() ? custom.trim() : selected);
-
-    const handleAdd = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        const c = cropToSave();
-        if (!c) throw new Error('Please select or enter a crop');
-        if (!cropStart || !cropEnd) throw new Error('Please provide cycle start and end dates for this crop');
-        const s = new Date(cropStart);
-        const e = new Date(cropEnd);
-        if (isNaN(s.getTime()) || isNaN(e.getTime()) || s >= e) throw new Error('Please provide valid start/end dates (start < end)');
-
-        const user = auth.currentUser;
-        if (!user) throw new Error('Please login to add a crop');
-
-        const existing = userProfile?.crops || (userProfile?.crop ? [userProfile.crop] : []);
-        const newCrops = Array.from(new Set([...existing, c]));
-        const data = { crop: c, crops: newCrops, cycleStart: cropStart, cycleEnd: cropEnd, updatedAt: new Date().toISOString() };
-        await setDoc(doc(db, 'users', user.uid), data, { merge: true });
-        onAdd && onAdd({ ...(userProfile || {}), ...data });
-        onClose();
-      } catch (err: any) {
-        setError(err.message || 'Failed to add crop');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/40">
-        <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl relative animate-scaleIn border border-white/20">
-          <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"><X size={16} /></button>
-          <h3 className="text-2xl font-serif text-slate-900 mb-2">Add New Crop</h3>
-          <p className="text-slate-500 text-xs mb-8">Select from popular crops or enter a custom crop name.</p>
-
-          {error && <div className="mb-6 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] border border-red-100 flex items-center gap-2"><AlertTriangle size={14}/>{error}</div>}
-
-          <div className="space-y-4">
-            <div>
-              <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Choose Crop</label>
-              <select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
-                <option value="">-- Select --</option>
-                {cropOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Or enter custom crop</label>
-              <input value={custom} onChange={(e) => setCustom(e.target.value)} type="text" placeholder="E.g. Banana" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Cycle Start</label>
-                <input type="date" value={cropStart} onChange={(e) => setCropStart(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" />
-              </div>
-              <div>
-                <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Cycle End</label>
-                <input type="date" value={cropEnd} onChange={(e) => setCropEnd(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={handleAdd} disabled={loading} className="flex-1 bg-green-600 text-white py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-green-600/20">
-                {loading ? <RefreshCw className="animate-spin w-4 h-4" /> : 'Add Crop'}
-              </button>
-              <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-900 py-3 rounded-2xl font-black uppercase text-[10px]">Cancel</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // My Crops Modal: list user crops and set one as primary
-  const MyCropsModal = ({ isOpen, onClose, userProfile }: any) => {
-    const [localSelected, setLocalSelected] = useState<string | null>(null);
-
-    useEffect(() => {
-      if (isOpen) {
-        setLocalSelected(userProfile?.crop || null);
-        setMyCropsError('');
-        setMyCropsLoading(false);
-      }
-    }, [isOpen, userProfile]);
-
-    if (!isOpen) return null;
-
-    const cropsList = userProfile?.crops && Array.isArray(userProfile.crops) && userProfile.crops.length > 0
-      ? userProfile.crops
-      : (userProfile?.crop ? [userProfile.crop] : []);
-
-    const handleConfirm = async () => {
-      try {
-        setMyCropsLoading(true);
-        setMyCropsError('');
-        const c = localSelected;
-        if (!c) throw new Error('Please select a crop');
-        const user = auth.currentUser;
-        if (!user) throw new Error('Please login to set primary crop');
-        const data = { crop: c, updatedAt: new Date().toISOString() };
-        await setDoc(doc(db, 'users', user.uid), data, { merge: true });
-        setUserProfile((prev: any) => ({ ...(prev || {}), ...data }));
-        setSelectedCrop(c);
-        onClose();
-      } catch (err: any) {
-        setMyCropsError(err.message || 'Failed to set primary crop');
-      } finally {
-        setMyCropsLoading(false);
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/40">
-        <div className="bg-white w-full max-w-md rounded-[2rem] p-6 shadow-2xl relative animate-scaleIn border border-white/20">
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"><X size={16} /></button>
-          <h3 className="text-2xl font-serif text-slate-900 mb-2">My Crops</h3>
-          <p className="text-slate-500 text-xs mb-4">Select a crop to set it as your primary crop.</p>
-
-          {myCropsError && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] border border-red-100">{myCropsError}</div>}
-
-          <div className="space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar mb-4">
-            {cropsList.length === 0 && (
-              <div className="p-4 bg-slate-50 rounded-xl text-slate-500">No crops found. Add a crop first.</div>
-            )}
-            {cropsList.map((c: string) => (
-              <div key={c} className={`flex items-center justify-between p-3 rounded-xl border ${localSelected === c ? 'border-green-600 bg-green-50' : 'border-slate-100 bg-white'}`}>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-slate-400"><Wheat size={16}/></div>
-                  <div>
-                    <p className="font-bold text-slate-900">{c}</p>
-                    <p className="text-[11px] text-slate-400">Click to select</p>
-                  </div>
-                </div>
-                <div>
-                  <button onClick={() => setLocalSelected(c)} className="px-3 py-1 rounded-full text-[11px] font-black border border-slate-200 bg-white">Select</button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex gap-3">
-            <button onClick={handleConfirm} disabled={myCropsLoading} className="flex-1 bg-green-600 text-white py-3 rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-green-600/20">
-              {myCropsLoading ? <RefreshCw className="animate-spin w-4 h-4" /> : 'Set as Primary'}
-            </button>
-            <button onClick={onClose} className="flex-1 bg-slate-100 text-slate-900 py-3 rounded-2xl font-black uppercase text-[10px]">Cancel</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 selection:bg-green-100 selection:text-green-900 overflow-x-hidden">
@@ -1022,13 +667,7 @@ const App: React.FC = () => {
                          Hello! I am your Kisan AI Expert. How can I help you improve your farm today?
                       </div>
                    </div>
-                   {messages.map((m, idx) => (
-                     <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] p-6 rounded-3xl text-sm shadow-sm ${m.role === 'user' ? 'rounded-tr-none bg-green-600 text-white' : 'rounded-tl-none bg-white border border-slate-100 text-slate-600'}`}>
-                           {m.text}
-                        </div>
-                     </div>
-                   ))}
+                   {messages.map((m, idx) => renderMessage(m, idx))}
                    {loadingAi && (
                      <div className="flex justify-start">
                         <div className="bg-white border border-slate-100 p-4 rounded-2xl flex items-center gap-3">
@@ -1114,23 +753,6 @@ const App: React.FC = () => {
           setAuthModal({isOpen: false, mode: 'login'}); 
           setCurrentView('dashboard'); 
         }} 
-      />
-      <ProfileEditModal
-        isOpen={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
-        userProfile={userProfile}
-        onSave={(data: any) => setUserProfile(data)}
-      />
-      <AddCropModal
-        isOpen={addCropOpen}
-        onClose={() => setAddCropOpen(false)}
-        userProfile={userProfile}
-        onAdd={(data: any) => setUserProfile(data)}
-      />
-      <MyCropsModal
-        isOpen={myCropsOpen}
-        onClose={() => setMyCropsOpen(false)}
-        userProfile={userProfile}
       />
     </div>
   );
