@@ -150,7 +150,7 @@ const StatCard = ({ icon, label, value, color }: any) => (
   </div>
 );
 
-const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
+const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess, locations }: any) => {
   const [step, setStep] = useState<'phone' | 'otp' | 'profile'>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -177,6 +177,8 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
   }, [isOpen, mode]);
 
   if (!isOpen) return null;
+
+  const L = locations || locationData;
 
   const handleSendOtp = async () => {
     try {
@@ -299,7 +301,7 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
               <label className="text-[8px] font-black uppercase text-slate-400 ml-1">{t.auth.state}</label>
               <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" value={profile.state} onChange={(e) => setProfile({...profile, state: e.target.value, district: '', mandal: ''})}>
                 <option value="">{t.auth.state}</option>
-                {Object.keys(locationData).map(s => <option key={s} value={s}>{s}</option>)}
+                {Object.keys(L || {}).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
@@ -308,7 +310,7 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
                 <label className="text-[8px] font-black uppercase text-slate-400 ml-1">{t.auth.district}</label>
                 <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" value={profile.district} onChange={(e) => setProfile({...profile, district: e.target.value, mandal: ''})}>
                   <option value="">{t.auth.district}</option>
-                  {Object.keys(locationData[profile.state]).map(d => <option key={d} value={d}>{d}</option>)}
+                  {Object.keys(L[profile.state] || {}).map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
             )}
@@ -318,7 +320,7 @@ const AuthModal = ({ isOpen, mode, onClose, t, onAuthSuccess }: any) => {
                 <label className="text-[8px] font-black uppercase text-slate-400 ml-1">{t.auth.mandal}</label>
                 <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm" value={profile.mandal} onChange={(e) => setProfile({...profile, mandal: e.target.value})}>
                   <option value="">{t.auth.mandal}</option>
-                  {locationData[profile.state][profile.district].map((m: string) => <option key={m} value={m}>{m}</option>)}
+                  {(L[profile.state] && L[profile.state][profile.district] || []).map((m: string) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
             )}
@@ -483,6 +485,7 @@ const App: React.FC = () => {
   const [lang, setLang] = useState('en');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [currentView, setCurrentView] = useState('home');
+  const [allLocations, setAllLocations] = useState<any>(null);
 
   // AI Expert States
   const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([]);
@@ -518,6 +521,16 @@ const App: React.FC = () => {
     });
     return () => unsub();
   }, [authModal.isOpen]);
+
+  // Load locations JSON from public folder (if available)
+  useEffect(() => {
+    let mounted = true;
+    fetch('/locations.json')
+      .then(r => { if (!r.ok) throw new Error('locations.json not found'); return r.json(); })
+      .then(data => { if (mounted) setAllLocations(data); })
+      .catch(() => { /* ignore, fallback to inline locationData */ })
+    return () => { mounted = false; };
+  }, []);
 
   
 
@@ -748,7 +761,7 @@ const App: React.FC = () => {
               <label className="text-[8px] font-black uppercase text-slate-400 ml-1">State</label>
               <select value={localProfile.state} onChange={(e) => setLocalProfile({...localProfile, state: e.target.value, district: '', mandal: ''})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
                 <option value="">Select state</option>
-                {Object.keys(locationData).map(s => <option key={s} value={s}>{s}</option>)}
+                {Object.keys(allLocations || locationData).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
@@ -757,7 +770,7 @@ const App: React.FC = () => {
                 <label className="text-[8px] font-black uppercase text-slate-400 ml-1">District</label>
                 <select value={localProfile.district} onChange={(e) => setLocalProfile({...localProfile, district: e.target.value, mandal: ''})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
                   <option value="">Select district</option>
-                  {Object.keys(locationData[localProfile.state]).map(d => <option key={d} value={d}>{d}</option>)}
+                  {Object.keys((allLocations || locationData)[localProfile.state] || {}).map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
             )}
@@ -767,7 +780,7 @@ const App: React.FC = () => {
                 <label className="text-[8px] font-black uppercase text-slate-400 ml-1">Mandal</label>
                 <select value={localProfile.mandal} onChange={(e) => setLocalProfile({...localProfile, mandal: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
                   <option value="">Select mandal</option>
-                  {locationData[localProfile.state][localProfile.district].map((m: string) => <option key={m} value={m}>{m}</option>)}
+                  {((allLocations || locationData)[localProfile.state] && (allLocations || locationData)[localProfile.state][localProfile.district] || []).map((m: string) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
             )}
@@ -965,6 +978,48 @@ const App: React.FC = () => {
   const CropGuidelinesModal = ({ isOpen, crop, onClose }: any) => {
     if (!isOpen || !crop) return null;
     const info = cropInfo[crop] || {};
+    const [copied, setCopied] = useState(false);
+
+    const copyText = async () => {
+      const text = info.guidelines || '';
+      if (!text) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          // fallback for older browsers
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          (document.execCommand && document.execCommand('copy')) || false;
+          document.body.removeChild(ta);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      } catch (err) {
+        try {
+          // second fallback attempt using textarea
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          (document.execCommand && document.execCommand('copy')) || false;
+          document.body.removeChild(ta);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        } catch (e) {
+          console.error('Copy failed', e);
+        }
+      }
+    };
+
     return (
       <div className="fixed inset-0 z-[125] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/50">
         <div className="bg-white w-full max-w-3xl rounded-[1.5rem] p-6 shadow-2xl relative animate-scaleIn border border-white/20 overflow-hidden">
@@ -979,7 +1034,9 @@ const App: React.FC = () => {
               <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{info.guidelines || 'No guidance available for this crop.'}</p>
               <div className="flex gap-3 mt-6">
                 <button onClick={onClose} className="bg-green-600 text-white px-5 py-3 rounded-2xl font-black uppercase text-[10px]">Close</button>
-                <button onClick={() => { navigator.clipboard?.writeText(info.guidelines || ''); }} className="bg-slate-100 text-slate-900 px-5 py-3 rounded-2xl font-black uppercase text-[10px]">Copy</button>
+                <button onClick={copyText} className="flex items-center gap-2 bg-slate-100 text-slate-900 px-5 py-3 rounded-2xl font-black uppercase text-[10px]">
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
               </div>
             </div>
           </div>
@@ -1177,6 +1234,7 @@ const App: React.FC = () => {
         mode={authModal.mode} 
         onClose={() => setAuthModal({isOpen: false, mode: 'login'})} 
         t={t} 
+        locations={allLocations}
         onAuthSuccess={(p: any) => { 
           setUserProfile(p); 
           setIsLoggedIn(true); 
