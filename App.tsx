@@ -45,6 +45,49 @@ const languages = [
 
 const cropOptions = ["Paddy", "Wheat", "Cotton", "Chilli", "Turmeric", "Maize", "Tomato", "Sugarcane"];
 
+const cropInfo: any = {
+  Paddy: {
+    season: 'Kharif',
+    image: 'https://media.istockphoto.com/id/187251869/photo/rice-crop.jpg?s=612x612&w=0&k=20&c=ATxHepv7IZ99NcNKkA7WyPsrsjorIubeV1uZbXboGag=',
+    guidelines: 'Paddy prefers clayey to silty loam soils with good water retention. Maintain flooded fields during vegetative growth, monitor for blast and sheath blight; apply balanced NPK with emphasis on split nitrogen application.'
+  },
+  Wheat: {
+    season: 'Rabi',
+    image: 'https://thumbs.dreamstime.com/b/grains-ears-wheat-25858561.jpg',
+    guidelines: 'Wheat grows best in well-drained loamy soils with neutral pH. Use timely irrigation during tillering and heading, practice crop rotation, and apply phosphorus at sowing and nitrogen in split doses.'
+  },
+  Cotton: {
+    season: 'Kharif',
+    image: 'https://static.vecteezy.com/system/resources/thumbnails/046/349/194/small/calming-ready-to-harvest-cotton-landscapes-for-web-use-free-photo.jpeg',
+    guidelines: 'Cotton needs deep, fertile soils and warm temperatures. Ensure adequate potassium for boll formation, control bollworms with pheromone traps and targeted insecticides, and practice timely weeding.'
+  },
+  Chilli: {
+    season: 'Rabi/Kharif',
+    image: 'https://media.istockphoto.com/id/1316992167/photo/red-chili-peppers-in-vegetable-garden.jpg?s=612x612&w=0&k=20&c=9WxPxtBqBegiJtWZ6J-IRr-WqLs8qgS4G_JiSEQk-IQ=',
+    guidelines: 'Chilli prefers well-drained loams. Maintain soil moisture with drip irrigation, use balanced fertilizers and biofertilizers, and scout regularly for aphids and thrips.'
+  },
+  Turmeric: {
+    season: 'Kharif',
+    image: 'https://t3.ftcdn.net/jpg/03/30/30/94/360_F_330309413_1GCy01jOT01AQWNVLoMQSluhmmXNSKFJ.jpg',
+    guidelines: 'Turmeric thrives in well-drained loamy soil rich in organic matter. Plant rhizomes at proper spacing, use mulching, and apply NPK with higher potassium for better rhizome quality.'
+  },
+  Maize: {
+    season: 'Kharif/Rabi',
+    image: 'https://static.vecteezy.com/system/resources/thumbnails/071/529/668/small/cornfield-agriculture-maize-crop-cultivation-rural-harvest-free-photo.jpg',
+    guidelines: 'Maize prefers fertile, well-drained soils. Ensure starter phosphorus at sowing, timely nitrogen split doses, and monitor for stem borer; use IPM practices.'
+  },
+  Tomato: {
+    season: 'Rabi',
+    image: 'https://images.unsplash.com/photo-1471194402529-8e0f5a675de6?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8dG9tYXRvJTIwcGxhbnR8ZW58MHx8MHx8fDA%3D',
+    guidelines: 'Tomato requires fertile, well-drained soils and consistent irrigation. Support plants, use calcium to reduce blossom end rot, and rotate crops to reduce soil-borne diseases.'
+  },
+  Sugarcane: {
+    season: 'Perennial',
+    image: 'https://t3.ftcdn.net/jpg/05/40/72/42/360_F_540724215_tERan6tNdbZj3nb68aDBnEeYmgwxeTQ1.jpg',
+    guidelines: 'Sugarcane grows well in deep, fertile soils. Ensure adequate nitrogen and potassium, consider ratoon management, and monitor for white grub and mosaic virus.'
+  }
+};
+
 const locationData: any = {
   "Andhra Pradesh": {
     "Visakhapatnam": ["Anandapuram", "Pendurthi", "Bheemunipatnam", "Gajuwaka"],
@@ -450,6 +493,8 @@ const App: React.FC = () => {
   const [addCropOpen, setAddCropOpen] = useState(false);
   const [myCropsOpen, setMyCropsOpen] = useState(false);
   const [selectedCrop, setSelectedCrop] = useState<string | null>(null);
+  const [guidelineOpen, setGuidelineOpen] = useState(false);
+  const [guidelineCrop, setGuidelineCrop] = useState<string | null>(null);
   const [myCropsLoading, setMyCropsLoading] = useState(false);
   const [myCropsError, setMyCropsError] = useState('');
   const [langOpen, setLangOpen] = useState(false);
@@ -916,6 +961,33 @@ const App: React.FC = () => {
     );
   };
 
+  // Crop Guidelines Modal: displays image and detailed info for a crop
+  const CropGuidelinesModal = ({ isOpen, crop, onClose }: any) => {
+    if (!isOpen || !crop) return null;
+    const info = cropInfo[crop] || {};
+    return (
+      <div className="fixed inset-0 z-[125] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/50">
+        <div className="bg-white w-full max-w-3xl rounded-[1.5rem] p-6 shadow-2xl relative animate-scaleIn border border-white/20 overflow-hidden">
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"><X size={16} /></button>
+          <div className="md:flex gap-6">
+            <div className="md:w-1/3 w-full rounded-xl overflow-hidden">
+              <img src={info.image || ''} alt={crop} className="w-full h-64 object-cover" />
+            </div>
+            <div className="md:w-2/3 w-full">
+              <h3 className="text-3xl font-bold text-slate-900 mb-2">{crop}</h3>
+              <div className="text-[11px] font-black uppercase text-slate-400 mb-4">{info.season || 'Season'}</div>
+              <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">{info.guidelines || 'No guidance available for this crop.'}</p>
+              <div className="flex gap-3 mt-6">
+                <button onClick={onClose} className="bg-green-600 text-white px-5 py-3 rounded-2xl font-black uppercase text-[10px]">Close</button>
+                <button onClick={() => { navigator.clipboard?.writeText(info.guidelines || ''); }} className="bg-slate-100 text-slate-900 px-5 py-3 rounded-2xl font-black uppercase text-[10px]">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 selection:bg-green-100 selection:text-green-900 overflow-x-hidden">
       <Navbar />
@@ -987,21 +1059,21 @@ const App: React.FC = () => {
                <p className="text-slate-500 text-base">Expert guidance for high-yield cultivation of popular Indian crops.</p>
              </div>
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {cropOptions.map(crop => (
-                  <div key={crop} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-xl transition-all hover:-translate-y-1">
-                    <div className="h-40 bg-slate-50 flex items-center justify-center relative">
-                      <Wheat size={64} className="text-green-600/20 group-hover:scale-110 transition-transform" />
-                      <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-green-600 border border-green-50 shadow-sm">Kharif</div>
+                 {cropOptions.map(crop => (
+                    <div key={crop} className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm group hover:shadow-xl transition-all hover:-translate-y-1">
+                      <div className="h-40 bg-slate-50 flex items-center justify-center relative overflow-hidden">
+                        <img src={cropInfo[crop]?.image || 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&q=80&w=1200'} alt={crop} className="w-full h-full object-cover" />
+                        <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-green-600 border border-green-50 shadow-sm">{cropInfo[crop]?.season || 'Season'}</div>
+                      </div>
+                      <div className="p-8">
+                        <h4 className="text-2xl font-bold text-slate-900 mb-4">{crop}</h4>
+                        <p className="text-slate-400 text-sm mb-6 leading-relaxed">{(cropInfo[crop]?.guidelines && cropInfo[crop].guidelines.split('.').slice(0,1).join('.') + '.') || 'Short guidance available.'}</p>
+                        <button onClick={() => { setGuidelineCrop(crop); setGuidelineOpen(true); }} className="flex items-center gap-2 text-green-600 font-black uppercase text-[10px] tracking-widest group-hover:gap-3 transition-all">
+                          View Guidelines <ArrowRight size={14}/>
+                        </button>
+                      </div>
                     </div>
-                    <div className="p-8">
-                      <h4 className="text-2xl font-bold text-slate-900 mb-4">{crop}</h4>
-                      <p className="text-slate-400 text-sm mb-6 leading-relaxed">Optimal soil pH: 6.0-7.5. Requires consistent moisture throughout the vegetative stage.</p>
-                      <button className="flex items-center gap-2 text-green-600 font-black uppercase text-[10px] tracking-widest group-hover:gap-3 transition-all">
-                        View Guidelines <ArrowRight size={14}/>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
              </div>
           </div>
         )}
@@ -1128,6 +1200,11 @@ const App: React.FC = () => {
         isOpen={myCropsOpen}
         onClose={() => setMyCropsOpen(false)}
         userProfile={userProfile}
+      />
+      <CropGuidelinesModal
+        isOpen={guidelineOpen}
+        crop={guidelineCrop}
+        onClose={() => { setGuidelineOpen(false); setGuidelineCrop(null); }}
       />
     </div>
   );
