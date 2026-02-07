@@ -23,12 +23,12 @@ import { GoogleGenAI } from "@google/genai";
 
 // --- Firebase Config ---
 const firebaseConfig = {
-  apiKey: "AIzaSyB2x7yczlRk9UM9eloFRdBmIOeZjzpf3xw",
-  authDomain: "login-for-bank-emmp.firebaseapp.com",
-  projectId: "login-for-bank-emmp",
-  storageBucket: "login-for-bank-emmp.firebasestorage.app",
-  messagingSenderId: "493920867634",
-  appId: "1:493920867634:web:cb49dba2c43b2afd15f32b"
+  apiKey: "AIzaSyCrCyWO7lMrSAUJBZYs5WB8nVndXmoZ2mE",
+  authDomain: "farmer-with-chatbot.firebaseapp.com",
+  projectId: "farmer-with-chatbot",
+  storageBucket: "farmer-with-chatbot.firebasestorage.app",
+  messagingSenderId: "1011439498503",
+  appId: "1:1011439498503:web:868179268637a9f547c1a2"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -467,7 +467,7 @@ const DashboardView = ({ userProfile, t }: any) => {
                 <h4 className="text-xl font-serif mb-3">AI Recommendation</h4>
                 <p className="text-green-100/70 text-sm leading-relaxed mb-6">Localized analysis for {userProfile?.mandal} shows increasing soil alkalinity. Consider adjusting phosphate application for your next {userProfile?.crop} cycle.</p>
               </div>
-              <button className="relative z-10 flex items-center gap-2 text-green-400 font-black uppercase text-[9px] tracking-[0.2em] hover:translate-x-1 transition-all">
+              <button className="relative z-10 flex items-center gap-2 text-green-400 font-black uppercase text-[9px] tracking-[0.2em] hover:translate-x-1 transition-all" > 
                 Access Full AI Lab <ArrowRight size={14}/>
               </button>
               <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-green-500/10 blur-3xl"></div>
